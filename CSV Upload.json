@@ -1,0 +1,188 @@
+{
+  "name": "CSV Upload",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "file upload",
+        "formDescription": "Upload the student data",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "File upload",
+              "fieldType": "file"
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -480,
+        -64
+      ],
+      "id": "c33923e8-3e67-4cee-b5f9-df739409a68e",
+      "name": "On form submission",
+      "webhookId": "f133b5e6-8052-4f47-a815-da1995e1724b"
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "File_upload",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -256,
+        -64
+      ],
+      "id": "730f3aaa-d211-4515-8096-21c3e30a2eb9",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Clean this student enrollment row and return ONLY a JSON object.\nRow data: {{ JSON.stringify($json) }}\n \nRules:- Name: Title Case- Email: if invalid (no @ or no .com/.in) set INVALID_EMAIL- Phone: if less than 10 digits or empty set MISSING- Course: only Python or Machine Learning or Data Science- Fee_Paid: yes/YES = true, no/NO = false- City: Title Case, empty = UNKNOWN- Enrolled_Date: YYYY-MM-DD format\n \nReturn ONLY raw JSON. No explanation. No markdown.",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": []
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -32,
+        -64
+      ],
+      "id": "789468c8-496c-492b-8970-398eb9739533",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Helper function to convert text to Title Case\nfunction toTitleCase(str) {\n  if (!str) return \"UNKNOWN\";\n  return str.toString().trim().toLowerCase().replace(/\\b\\w/g, c => c.toUpperCase());\n}\n\nconst results = [];\n\n// Loop over all 50 incoming items\nfor (const item of $input.all()) {\n  let rawResponse = item.json.text || item.json.response || JSON.stringify(item.json);\n\n  // Strip out markdown code fences\n  rawResponse = rawResponse.replace(/```json/gi, '').replace(/```/g, '').trim();\n\n  let row = {};\n  try {\n    row = JSON.parse(rawResponse);\n  } catch (e) {\n    row = item.json;\n  }\n\n  // Name: Title Case\n  const cleanName = toTitleCase(row.Name || \"\");\n\n  // Email: Must contain '@' and ('.com' or '.in')\n  const rawEmail = (row.Email || \"\").toString().trim().toLowerCase();\n  const isValidEmail = rawEmail.includes('@') && (rawEmail.endsWith('.com') || rawEmail.endsWith('.in'));\n  const cleanEmail = isValidEmail ? rawEmail : \"INVALID_EMAIL\";\n\n  // Phone: Must be at least 10 digits\n  const digitsOnly = (row.Phone || \"\").toString().replace(/\\D/g, '');\n  const cleanPhone = digitsOnly.length >= 10 ? digitsOnly : \"MISSING\";\n\n  // Course: Only \"Python\", \"Machine Learning\", or \"Data Science\"\n  let cleanCourse = (row.Course || \"\").toString().trim();\n  const validCourses = [\"Python\", \"Machine Learning\", \"Data Science\"];\n  const matchedCourse = validCourses.find(c => c.toLowerCase() === cleanCourse.toLowerCase());\n  cleanCourse = matchedCourse || \"Python\";\n\n  // Fee_Paid: Boolean (true / false)\n  let cleanFee = false;\n  if (typeof row.Fee_Paid === 'boolean') {\n    cleanFee = row.Fee_Paid;\n  } else if (typeof row.Fee_Paid === 'string') {\n    cleanFee = ['yes', 'true', '1'].includes(row.Fee_Paid.trim().toLowerCase());\n  }\n\n  // City: Title Case, empty = UNKNOWN\n  let cleanCity = toTitleCase(row.City || \"\");\n  if (!cleanCity || cleanCity.toLowerCase() === 'unknown') {\n    cleanCity = \"UNKNOWN\";\n  }\n\n  // Enrolled_Date: YYYY-MM-DD\n  let cleanDate = (row.Enrolled_Date || \"\").toString().trim();\n  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(cleanDate)) {\n    const d = new Date(cleanDate);\n    cleanDate = !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : \"2025-01-01\";\n  }\n\n  results.push({\n    json: {\n      Student_ID: row.Student_ID || \"STU_UNKNOWN\",\n      Name: cleanName,\n      Email: cleanEmail,\n      Phone: cleanPhone,\n      Course: cleanCourse,\n      Fee_Paid: cleanFee,\n      City: cleanCity,\n      Enrolled_Date: cleanDate\n    }\n  });\n}\n\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        331.875,
+        -64
+      ],
+      "id": "7dc3fe1e-16bb-443c-977b-acf1d20329e9",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -144,
+        144
+      ],
+      "id": "cc098e98-35a0-47b4-bce5-5b24417d3f7d",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "K4qUOb3wdHX5xRwJ",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        560,
+        -64
+      ],
+      "id": "d25c10a5-5a88-4298-9494-da5d20441303",
+      "name": "Convert to File"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "ec02f8aa-fa47-43ef-9c3d-6c0c189fc168",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7f3e87056735cd6d8533f65b2daa6ccadfcef4721c5e2b5f2772fe3650f87dbf"
+  },
+  "nodeGroups": [],
+  "id": "OIG7Ml3486pHscpN",
+  "tags": []
+}
